@@ -697,6 +697,20 @@
     $table->foreign('filial_id')->references('id')->on('filiais');
     $table->foreign('produto_id')->references('id')->on('produtos');
 
+## removendo as FKs no método down de modo mais produtivo (avançado)
+
+### quando uma constraint é adicionada no método UP das migrations, é sabido que no método down dita constraint deve ser removida antes de excluir a(s) tabela(s) relacionada(s). Para não ter que desfazer as contraints uma por uma, pode ser utilizado um método específico da classe Schema para desabilitar as FKs, sendo necessário habilitá-las novamente após a exclusão das tabelas.
+
+    public function down(): void
+    {
+        Schema::disableForeignKeyConstraints();
+        Schema::dropIfExists('tabela1');
+        Schema::dropIfExists('tabela2');
+        Schema::dropIfExists('tabelaN');
+        Schema::enableForeignKeyConstraints();
+    }
+***no exemplo, as constraints de FK são removidas pelo disableForeignKeyConstraints(), para então ocorrer a exclusão das tabelas e por fim, habilitar novamente as constraints usando o enableForeignKeyConstraints()***
+
 ## posicionando colunas com AFTER
 
 ### é possível posicionar colunas usando as migrations. por padrão, as colunas são sempre colocadas à direita. caso deseje-se posicionar a coluna em um outro local, basta usar a função ->after(nomeColuna), passando por parâmetro a coluna que ficará à esquerda da nova adicionada.
@@ -1249,6 +1263,17 @@ php artisan migrate:fresh ***semelhante ao refresh, a diferença é que ele drop
         ])
 ***para outros tipos de validação, ver documentação***
 
+## validação avançada:
+
+### caso o valor de um item venha de outra tabela, para validá-lo basta passar no array de regras exists:<param1>,<param2>, sendo param1 o nome da tabela e param2 o nome da coluna em que o valor supostamente se encontra:
+
+    #molde:
+    'nomeCampoInput' => 'exists:nomeTabela,coluna'
+
+    #exemplo:
+    'unidade_id' => 'exists:unidades,id'
+    #checará na tabela unidades se o campo id passado existe
+
 ## repopulação de formulários com valores preenchidos - não perdendo o que já foi digitado pelo usuário:
 
 ### para persistir no formulário valores que já foram digitados, basta adicionar a função old(nomeCampo) no atributo value, passando por parâmetro o name do campo Input:
@@ -1296,6 +1321,13 @@ php artisan migrate:fresh ***semelhante ao refresh, a diferença é que ele drop
             <option value="{{$key}}" {{old('motivo_contato') == $key ? 'selected' : ''}}>{{$motivo_contato}}</option>
     }@endforeach
 ***a key será comparada com o value, enquanto o ternário testará se a option e a key são iguais para adicionar SELECTED ou deixar vazio***
+
+## Reutilização de forms no contexto CRUD (avançado!)
+
+### quando for necessário popular um formulário com dados no contexto de edição, pode-se usar um teste ternário alternativo usando ?? :
+
+    {{ $fornecedor->email ?? old('email')}}
+***neste caso, se o formulário retornou a variável - no exemplo, fornecedor - do banco e possuir o campo indicado, o valor do campo será o valor retornado. Caso não possua o valor, a função old não terá valor e o campo ficará em branco***
 
 ## Queries "avulsas":
 
@@ -1456,3 +1488,391 @@ php artisan migrate:fresh ***semelhante ao refresh, a diferença é que ele drop
 
     public function handle(Request $request, Closure $next, $nomeVarParam1, $nomeVarParam2){...code here...}
 ***após captura, as variáveis podem ser usadas para testes dentro da função handle***
+
+## Paginação de registros:
+
+### quando for necessário fazer paginação de registros, basta que se adicione na query do controller, em vez de get, a função ->paginate(N), sendo o parâmetro N o número de resultados por página. Ex:
+
+    $fornecedores = Fornecedor::where('nome', 'like', '%'.$request->input('nome').'%')
+        ->where('site', 'like', '%'.$request->input('site').'%')
+        ->where('uf', 'like', '%'.$request->input('uf').'%')
+        ->where('email', 'like', '%'.$request->input('email').'%')
+        ->paginate(2);
+***a rota deverá ser ajustada para get no arquivo web.php***
+
+### para exibir a paginação na página, chama-se a função ->links() do objeto. Ex:
+
+    {{ $fornecedores->links() }}
+
+### para que o query builder retorne corretamente as queries da página - quando uma query é feita, os parâmetros são perdidos quando se muda a página - deve-se utilizar a função ->appends($request), passando request por parâmetro, que contém o filtro da query. Ex:
+
+    {{ $fornecedores->appends($request)->links() }}
+***assim, os resultados da query serão exibidos corretamente, sem perda de dados entre a paginação***
+
+## Controllers com Resources:
+
+### O laravel dispõe de funcionalidade para estruturar os controllers com as funções de CRUD. Quando criando um controlador, usa-se o seguinte comando:
+
+    php artisan make:controller --resource NomeController --model=NomeObjeto
+***usando o --resource criará de modo automático as funções iniciais de CRUD, enquanto --model=NomeObjeto criará o arquivo do model a ser editado***
+
+### as funções do controller criado com resource serão:
+
+    #listará os recursos
+    public function index(){...code...}
+
+    #criará os recursos
+    public function create(){...code...}
+
+    #armazenará os recursos
+    public function store(Request $request){...code...}
+
+    #exibirá um recurso específico
+    public function show(NomeModel $nomeObj){...code...}
+
+    #mostrará a forma de alteração do recurso
+    public function edit(NomeModel $nomeObj){...code...}
+
+    #atualiza o recurso no banco
+    public function update(Request $request, $NomeModel $nomeObj){...code...}
+
+    #apaga o recurso especificado
+    public function destroy(NomeModel $nomeObj){...code...}
+***o comando especificado também criará o model baseado no nome dado em --model=NomeModel***
+
+## Leveling UP com resources:
+
+### quando um controller é criado com resources, é possível criar um "grupo" de rotas associadas a ele sem criá-las individualmente:
+
+    #molde
+    Route::resource('/caminho', \App\Http\Controllers\NomeController::class);
+    #nicknames/paths gerados:
+    caminho.index #'/caminho'
+    caminho.store #'/caminho'
+    caminho.create #'/caminho/create'
+    caminho.show #'/caminho/{modelName}'
+    caminho.update #'/caminho/{modelName}'
+    caminho.destroy #'/caminho/{modelName}'
+    caminho.edit #'/caminho/{modelName}/edit'
+
+    #cada um será associado ao path/route apropriado
+    #caminho normalmente está relacionado ao nome do model
+
+    #exemplo
+    Route::resource('/produto', \App\Http\Controllers\ProdutoController::class);
+    #criará os nicknames/paths
+    produto.index  #'/produto'
+    produto.store  #'/produto'
+    produto.create  #'/produto/create'
+    produto.show  #'/produto/{produto}'
+    produto.update  #'/produto/{produto}'
+    produto.destroy  #'/produto/{produto}'
+    produto.edit  #'/produto/{produto}/edit'
+
+### o laravel criará automaticamente os nicknames de rotas e trabalhará com os verbos HTTP(GET, POST, PUT, PATCH, DELETE) apropriados pra cada método do controller
+
+## submissão de formulários para alteração no banco de dados:
+
+### sempre que houver a necessidade de operações CRUD no banco de dados, especificamente PUT|PATCH|DELETE, é necessário adicionar aos formulários a instrução @method(VERBO_HTTP), contendo o tipo de operação que será feita.
+
+    @method('PUT') -> quando houver necessidade de alteração por completo do objeto
+
+    @method('PATCH') -> quando a alteração for somente em parte/partes do objeto
+
+    @method('DELETE') -> quando houver necessidade de exclusão do objeto
+***PUT e PATCH são semelhantes funcionalmente. Apenas por convenção, PUT é usado quando o objeto for inteiramente modificado, enquanto PATCH é usando para modificações parciais***
+
+## Reaproveitando formulários:
+
+### é possível reaproveitar formulários de criação de itens para edição. Quando uma view for apresentada, basta testar se um parâmetro está definido ou não, quando um método for acessado:
+
+    @if(isset($produto->id))
+                <form method="post" action="{{ route('produto.update', ['produto' => $produto->id]) }}">
+                    @csrf
+                    @method('PUT')
+            @else
+                <form method="post" action="{{ route('produto.store') }}">
+                    @csrf
+            @endif
+***no método acima, o IF testa se o atributo ID está definido. a instrução entenderá que é um formulário de edição, direcionando para a rota de UPDATE e usando o verbo HTTP put, característico de edições, sendo necessário também o recebimento do parâmetro do objeto a ser carregado (no exemplo, o id de $produto)***
+
+***caso contrário, a instrução seguirá com a rota de STORE, usando o verbo HTTP post***
+
+### já nos formulários, é necessário testar os campos para edição ou inclusão:
+
+    #input text
+    <input ... value="{{ $produto->nome ?? old('nome') }}" ...>
+
+    #input option
+    <option
+        value="{{ $unidade->id }}" 
+        {{ ($produto->unidade_id ?? old('unidade_id')) == $unidade->id ? 'selected' : ''}}>
+        {{ $unidade->descricao }}</option>
+***no exemplo acima, o teste ternário verificará a existência de um atributo (no caso, nome) definido, baseado no retorno do primeiro teste edição/inclusão. Caso exista (edição), o valor será aquele a ser editado. Caso não exista (inclusão), será feito ainda o teste anterior de valores preechidos (old values e errors) para continuar na inclusão dos itens***
+***nas options, a diferença é que o teste é realizado primeiro antes de seguir com a comparação para definir se selected ou vazio***
+
+## Relacionamento 1 para 1 via Eloquent ORM:
+
+## hasOne()
+
+### para adicionar relacionamento 1 para 1 no Laravel, basta criar uma função dentro do model da entidade forte e chamar nessa função $this->hasOne(ModelPath), onde modelPath recebe o caminho do model que será importado(a entidade fraca):
+
+    #modelo
+    public function nomeFunctionModel(){
+        return $this->hasOne('App\Models\NomeModel');
+    }
+
+    #exemplo
+    public function produtoDetalhe(){
+        return $this->hasOne('App\Models\ProdutoDetalhe');
+    }
+***a nomenclatura fica a critério do dev, mas por convenção/recomendação, o ideal é que a função receba o nome relacionado ao model que está sendo invocado***
+
+### posteriormente, na view, chama-se o atributo no formato:
+
+    #modelo
+    {{$obj->nomeFunctionModel->item}}
+
+    #exemplo
+    {{$produto->produtoDetalhe->largura}}
+***aqui, será retornada com base no ID de produto (entidade forte) o valor na coluna largura na entidade fraca(produtoDetalhe) chamada pela função***
+
+### o Laravel se encarrega de "combinar" de forma automática a PK da entidade forte como FK da entidade fraca a partir  do campo/tabela indicado como FK
+
+## belongsTo()
+
+### belongsTo segue o caminho inverso de hasOne, permitindo o acesso pela unidade fraca à atributos da entidade forte:
+
+    #modelo:
+    public function nomeModelForte(){
+        return $this->belongsTo('App\Models\NomeModel');
+    }
+
+    #exemplo:
+    public function produto(){
+        return $this->belongsTo('App\Models\Produto');
+    }
+***neste exemplo o model da entidade fraca consegue acessar os atributos de Produto, que é a entidade forte, através da função declarada, acessando via FK/pk***
+
+### quando precisar acessar os atributos, chama-se a função da mesma forma que no hasOne:
+
+    #modelo
+    {{ $modelFraco->modelForte->atributo }}
+
+    #exemplo
+    {{ $produto_detalhe->produto->nome ?? '' }}
+***no exemplo, o atributo nome de produto será acessado por produto_detalhe baseado na FK definida em produto_detalhe***
+
+## Nomes não padronizados no EloquentORM
+
+### pode ser que em algum momento os nomes de tabelas não coincidam com os nomes de model. Nesse cenário, é possível indicar nos models quais tabelas os objetos se referem no hasOne() e belongsTo() passando mais parâmetros e declarando o nome da tabela na variável $table:
+
+### hasOne(param1, param2, param3):
+
+    #modelo
+    protected $table = 'nomeTabela';
+
+    #exemplo:
+    class Item extends Model{
+        ...
+        protected $table = 'produtos';
+        ...
+    }
+***$table indicará a tabela que o model se refere quando o nome for diferente daquele do model. no exemplo, o model item se refere à tabela produtos***
+
+### os parâmetros passados dentro de hasOne() são: nome da tabela da entidade fraca, foreignKey com o nome da tabela entidade forte e sua PK, no modelo de nomenclatura do laravel tabela_colunaPK, e a chave local que relacionará o item na entidade fraca
+
+    public function item(){
+    return $this->hasOne('App\Models\ItemDetalhe', 'produto_id', 'id');
+    }
+***no exemplo, o modelo é ItemDetalhe, que recebe a FK id da tabela produto e se relaciona a ela por meio de seu ID***
+
+### belongsTo(param1, param2, param3):
+
+    class ItemDetalhe extends Model{
+        ...
+        protected $table = 'produto_detalhes';
+        ...
+    }
+***nome da tabela não padronizada***
+
+    public function item(){
+        return $this->belongsTo('App\Models\Item', 'produto_id', 'id');
+    }
+***no exemplo o primeiro parâmetro é o model da entidade forte, o segundo parâmetro é a foreign key com a nomenclatura EloquentORM (nomeTabelaForte_colunaPKReference) e como terceiro parâmetro a coluna PK (no exmeplo, ID) da tabela que é a entidade fraca***
+
+### no caso de belongsTo, o controller precisará de uma mudança. Ao invés de receber uma instância de request, um controller edit precisará receber o $id(ou qualquer que seja a chave PK da tabela fraca) para somente então instanciar o modelo e usar find() passando o ID como parâmetro:
+
+    public function edit($id)
+    {
+        ...
+        $produtoDetalhe = ItemDetalhe::find($id);
+        ...
+    }
+***o retorno será idêntico ao retornado por um parâmetro do tipo request***
+
+## Eager Loading e Lazy Loading:
+
+### eager loading e lazy loading se referem ao método de carregamento das queries de hasOne e belongs to, no contexto de que dados relacionais que possuem relacionamento hasOne e belongsTo só são carregados após a chamada do método na página caracterizando o LAZY loading.
+
+    @foreach ($produtos as $produto)
+                        <tr>
+                            <td>{{ $produto->nome }}</td>
+                            <td>{{ $produto->descricao }}</td>
+                            <td>{{ $produto->peso }}</td>
+                            <td>{{ $produto->unidade_id }}</td>
+                            <td>{{$produto->itemDetalhe->comprimento ?? ''}}</td>
+                            <td>{{$produto->itemDetalhe->largura ?? ''}}</td>
+***no exemplo, caso houvesse uma tentativa de exibir os dados do object array produto, se a exibição fosse feita antes da chamada do método itemDetalhe, apenas os dados relacionados a produto (sem os dados relacionados da tabela fraca do método itemDetalhe) seriam exibidos (nome, desc, etc seriam exibidos, comprimento, largura não seriam por pertencerem ao método itemDetalhe). Isso acontece porque o método padrão é o lazyLoading***
+
+***caso houvesse necessidade de exibir os dados completos já no carregamento da página, o método de eager loading pode ser aplicado usando no controller do objeto a chamada do método with(NomeMétodoAuxiliar)***
+
+    #modelo:
+    #primeiro, a função declarada no model do objeto
+        public function nomeFunção(){
+            return $this->hasOne(PathModel, params, ...);
+        }
+
+        NomeModel::with(['nomeFunção'])->paginate(N)->...
+    #podem ser declaradas quantas funções forem necessárias
+    # os métodos compreendem às funções de carregamento de dados dos models
+
+    #exemplo:
+    #função itemDetalhe, declarada dentro do model Item
+        public function itemDetalhe(){
+            return $this->hasOne('App\Models\ItemDetalhe', 'produto_id', 'id');
+        }
+
+    #chamada do object model Item aplicando with(['itemDetalhe']), habilitando o eager loading
+        Item::with(['itemDetalhe'])
+
+### relacionamento 1 para N com hasMany():
+
+### a função hasMany recebe 3 parâmetros para estabelecer a relação 1 para N (muitos): o caminho do model da entidade fraca, a foreign key na entidade fraca a primary key da tabela mapeada pelo modelo forte:
+
+    #modelo
+    public function nomeEntidadeFraca(){
+        return $this->hasMany(pathDoModelFraco, foreignKey, <PK tabela forte>);    
+    }
+
+    #exemplo
+    public function produtos(){
+        #1
+        return $this->hasMany('App\Models\Item', 'fornecedor_id', 'id');
+        #2
+        return $this->hasMany('App\Models\Item');
+    }
+***por ter nomenclatura padrão laravel, os 2 parâmetros FK e PK podem ser omitidos, sendo o #2 uma opção de chamada do model fraco***
+***também podem ser carregados via eager loading, dentro da função with([])***
+
+## Relacionamento N para N com belongsToMany():
+
+### no relacionento NxN usa-se a função belongstToMany() passando 2 ou 4 parâmetros:
+
+### dois parâmetros no caso de aplicações que estejam implementando a nomenclatura padrão Laravel:
+
+    #modelo
+    public function nomeObj(){
+        return $this->belongsToMany('App\Models\NomeModel', 'nome_tabela_auxiliar');
+    }
+
+    #exemplo
+    public function produtos(){
+        return $this->belongsToMany('App\Models\Produto', 'pedido_produtos');
+    }
+***no exemplo as tabelas implementam os padrões de nomenclatura de FKs para seus elementos, por isso há apenas a necessidade do nome do model e da tabela auxiliar à qual ele será relacionado***
+
+### quatro parâmetros no caso de a nomenclatura não estar no padrão Laravel, sendo os 4 parêmtros necessários:
+
+    #modelo:
+    public function nomeObjFraco(){
+    return $this->belongsToMany('App\Models\NomeModelFraco', 'tabela_auxiliar', 'FK_tabela_forte1', 'FK_NomeModelFraco');
+    }
+        
+        1 - modelo de relacionamento NxN em relação ao modelo implementado
+        2 - nome da tabela auxiliar que armazena os registros de relacionamento
+        3 - nome da FK na tabela mapeada pelo modelo na tabela de relacionamento -> class NomeModel extends Model {
+            protected $table = 'NomeTabelaMapeada'
+        }
+        4 - nome da FK na tabela mapeada pelo model utilizado no relacionamento que estamos implementando
+    
+    #exemplo
+    return $this->belongsToMany('App\Models\Item', 'pedido_produtos', 'pedido_id', 'produto_id');
+    
+    #no exemplo, o modelo Item que é o modelo de relacionamento, pedido_produtos que é a tabela auxiliar, as FKs recebidas das tabelas pedido e produto(no caso, mapeada por Item) que são as que tem relação entre si
+
+## método pivot (tabela pivô):
+
+### quando uma tabela auxiliar é criada e relacionada NxN, é possível acessar os atributos extras da referida tabela através da função pivot, passando por parâmetro as colunas a serem retornadas:
+
+    #modelo
+    public function nomeObjFraco(){
+    return $this->belongsToMany('App\Models\NomeModelFraco', 'tabela_auxiliar', 'FK_tabela_forte1', 'FK_NomeModelFraco')->withPivot('nomeColuna', 'nomeColuna');
+    }
+
+    #exemplo:
+    return $this->belongsToMany('App\Models\Item', 'pedido_produtos', 'pedido_id', 'produto_id')->withPivot('created_at', 'updated_at');
+***no exemplo as colunas created_at e updated_at da tabela auxiliar serão retornadas para a view na chamada do objeto, podendo ser acessadas:***
+
+    {{ $produto->pivot->created_at->format('d/m/Y') }}
+***retornará o valor da coluna created_at da coluna pivô, formatando-a (format()) no modelo indicado no parâmetro da função format***
+
+## salvando itens no banco de dados usando ATTACH():
+
+### quando for necessário salvar itens no banco via controller, em vez de instanciar o objeto, pode-se chamar o método de relacionamento do belongsToMany no controller do relacionamento através do objeto relacionado:
+
+
+    $obj1->obj2 -> essa forma dá acesso aos atributos
+    $obj1->obj2() -> dá acesso ao objeto
+
+    #exemplo:
+
+    $pedido->produtos() -> no relacionamento NxN de pedido/produtos o objeto produtos é acessado, permitindo que seus métodos sejam utilizados
+
+### posteriormente, via método attach(params) do objeto, podemos adicionar os campos da requisição e as colunas onde eles serão alocados no banco:
+
+    #modelo
+    $obj1->obj2()->attach(
+            $request->get(nomeInput),
+            [nomeColuna => $request->get(nomeInput)]
+        );
+    
+    #exemplo:
+    $pedido->produtos()->attach(
+            $request->get('produto_id'),
+            ['quantidade' => $request->get('quantidade')]
+        );
+***no exemplo, o relacionamento é entre os objetos pedido e produto, com a função produtos() (poderia ser qualquer nome representando o belongsToMany) sendo o relacionamento NxN. attach() recebe por parâmetro o produto_id e o laravel identifica que a coluna que deve receber o valor do input passado no array associativo é quantidade - mesmo nome do input***
+
+### para formulários mais complexos, é possível passar para o attach um array associativo com todos os atributos e suas respectivas colunas:
+
+    #exemplo:
+    $pedido->produtos()->attach([
+            $request->get('produto_id'),
+            ['quantidade' => $request->get('quantidade')],
+            $request->get('produto_id'),
+            ['nomeColuna' => $request->get('inputName1')],
+            $request->get('produto_id'),
+            ['nomeColuna' => $request->get('inputName2')],
+            $request->get('produto_id'),
+            ['nomeColuna' => $request->get('inputName3')]
+        ]);
+
+## removendo relacionamentos com detach:
+
+### detach opera de forma inversa a attach, removendo itens relacionados na tabela auxiliar
+
+    #modelo
+    $obj1->obj2()->detach(param1);
+***no modelo, o relacionamento do objeto1 chama o método do objeto2 e desfaz o relacionamento baseado no parâmetro que indica o relacionamento (normalmente mapeado na definição do belongsToMany)***
+
+    #exemplo:
+    $pedido->produtos()->detach($produto->id);
+***o objeto pedido chama o método produtos e desfaz o relacionamento de um item específico produto que é relacionado pelo ID***
+
+### normalmente, esses relacionamentos são desfeitos enviando o detach para a rota via HTTP delete.
+
+## Excluindo registros:
+
+### para evitar que, durante a tentativa de exclusão de itens do banco, duplicatas sejam excluídas, deve-se usar PIVOT com o ID do registro da adição do relacionamento na tabela auxiliar para excluir o item específico que se deseja.
+

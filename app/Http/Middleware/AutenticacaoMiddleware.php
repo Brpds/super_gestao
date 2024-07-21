@@ -16,21 +16,13 @@ class AutenticacaoMiddleware
     public function handle(Request $request, Closure $next, $metodo_autenticacao, $perfil): Response
     {
 
-        //verificação dos parâmetros passados à rota
+        session_start();
 
-        if($metodo_autenticacao == 'padrao'){
-            echo "Verificar usuário e senha no Banco de dados. Pefil exibido: $perfil <br>";
-        }
-
-        if($metodo_autenticacao == 'ldap'){
-            echo "Verificar usuário e senha no Active Directory. Pefil exibido: $perfil <br>";
-        }
-        //verifica se o usuário tem acesso à rota:
-        if(false){
-            return $next($request); //passa a requisição adiante
+        //checa se o usuário está logado, 
+        if(isset($_SESSION['email']) && $_SESSION['email'] != ''){
+            return $next($request);
         }else{
-            //caso o usuário não esteja autenticado:
-            return Response('Acesso negado, requer autenticação');
+            return redirect()->route('site.login', ['erro' => 2]);
         }
     }
 }

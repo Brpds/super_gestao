@@ -15,6 +15,10 @@ class LoginController extends Controller
             $erro = 'Usuário ou senha não correspondem';
         }
 
+        if($request->get('erro') == 2){
+            $erro = 'Faça login para acessar a página';
+        }
+
         return view('site.login', ['titulo' => 'Login', 'erro' => $erro]);
     }
 
@@ -59,10 +63,16 @@ class LoginController extends Controller
             $_SESSION['nome'] = $usuario->name;
             $_SESSION['email'] = $usuario->email;
 
-            return redirect()->route('app.clientes');
+            return redirect()->route('app.home');
         }else{
             //redireciona a rota e captura o erro após a tentativa de validação
             return redirect()->route('site.login', ['erro' => 1]);
         }
+    }
+
+    public function sair(){
+        //finaliza a sessão
+        session_destroy();
+        return redirect()->route('site.index');
     }
 }
