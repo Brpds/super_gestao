@@ -1,3 +1,7 @@
+## Quick Note: This project still needs setup documentation, even though the migrations for creating/altering the database are there.  The application is configured to use MySQL WorkBench instead of SQLite - SQLite being the default. Documentation will come soon in place of this README.
+
+## Nota: Este projeto ainda precisa de documentação de configuração, mesmo que as migrations para criação/alteração do banco estejam em condições. A aplicação está configurada para uso no WorkBench do mysql em vez do SQLite, que é o padrão. Documentação virá em breve no lugar deste README.
+
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">
